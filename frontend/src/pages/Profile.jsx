@@ -146,6 +146,52 @@ const Profile = () => {
     }
   };
 
+  const handleChangePassword = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setFieldErrors({});
+
+    const { password, newPassword, confirmNewPassword } = passwordData;
+
+    if (newPassword !== confirmNewPassword) {
+      setFieldErrors({
+        confirmNewPassword: "Confirmation password does not match.",
+      });
+      toast.error("Confirmation password does not match.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await api.put("/profiles/change-password", {
+        password,
+        newPassword,
+        confirmNewPassword,
+      });
+
+      toast.success("Password changed successfully!");
+      setPasswordData({
+        password: "",
+        newPassword: "",
+        confirmNewPassword: "",
+      });
+      setShowPasswordModal(false);
+    } catch (err) {
+      const data = err.response?.data;
+      const errs = {};
+      if (Array.isArray(data?.message)) {
+        data.message.forEach((entry) => {
+          if (entry.field) errs[entry.field] = entry.error;
+        });
+      } else {
+        toast.error(data?.message || "Password change failed.");
+      }
+      setFieldErrors(errs);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen pt-[120px] pb-12 px-4 background-color">
       <Toaster position="top-center" />

@@ -4,7 +4,7 @@ import { AppService } from './app.service'
 import { SharedModule } from './shared/shared.module'
 import { APP_INTERCEPTOR } from '@nestjs/core'
 import { AuthModule } from './feature/auth/auth.module'
-import {ProfileModule } from './feature/profile/profile.module'
+import { ProfileModule } from './feature/profile/profile.module'
 import { MovieModule } from './feature/movie/module/movie.module'
 import { CinemaModule } from './feature/cinema/module/cinema.module'
 import { PermissionModule } from './feature/permission/permission.module'
@@ -28,7 +28,7 @@ import { StatisticModule } from './feature/statistic/module/statistic.module'
     TicketModule,
     PaymentModule,
     UserModule,
-    StatisticModule
+    StatisticModule,
   ],
   controllers: [AppController],
   providers: [
@@ -39,4 +39,4 @@ import { StatisticModule } from './feature/statistic/module/statistic.module'
     },
   ],
 })
-export class AppModule { }
+export class AppModule {}

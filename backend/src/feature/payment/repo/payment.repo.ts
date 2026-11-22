@@ -94,8 +94,11 @@ export class PaymentRepository {
     })
   }
 
-  async createPaymentWithBooking(userId: number, createPaymentDto: CreatePaymentDTO & { amount: number }) {
-    const { method, ticketIds, amount } = createPaymentDto
+  async createPaymentWithBooking(
+    userId: number,
+    createPaymentDto: CreatePaymentDTO & { amount: number; status?: string },
+  ) {
+    const { method, ticketIds, amount, status = 'COMPLETED' } = createPaymentDto
 
     return this.prisma.$transaction(async (prisma) => {
       const payment = await prisma.payment.create({
@@ -103,8 +106,8 @@ export class PaymentRepository {
           userId,
           method,
           amount,
-          status: 'COMPLETED',
-          paidAt: new Date(),
+          status,
+          paidAt: status === 'COMPLETED' ? new Date() : new Date(0), // Set to epoch for pending payments
           createdAt: new Date(),
         },
       })
@@ -161,5 +164,29 @@ export class PaymentRepository {
       totalSpent: result._sum.amount || 0,
       totalPayments: result._count || 0,
     }
+  }
+
+  async updatePaymentStatus(paymentId: number, status: string) {
+    const updateData: { status: string; paidAt?: Date } = { status }
+    if (status === 'COMPLETED') {
+      updateData.paidAt = new Date()
+    }
+    return this.prisma.payment.update({
+      where: { id: paymentId },
+      data: updateData,
+    })
+  }
+
+  async updateTicketsStatus(ticketIds: number[], status: string) {
+    return this.prisma.ticket.updateMany({
+      where: {
+        id: {
+          in: ticketIds,
+        },
+      },
+      data: {
+        status,
+      },
+    })
   }
 }

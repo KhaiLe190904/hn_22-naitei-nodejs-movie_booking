@@ -1,12 +1,16 @@
 import { Injectable, BadRequestException, NotFoundException, ForbiddenException } from '@nestjs/common'
 import { PaymentRepository } from '../repo/payment.repo'
 import { CreatePaymentDTO } from '../dto'
+import { VNPayService } from './vnpay.service'
 
 @Injectable()
 export class PaymentService {
-  constructor(private readonly paymentRepository: PaymentRepository) {}
+  constructor(
+    private readonly paymentRepository: PaymentRepository,
+    private readonly vnpayService: VNPayService,
+  ) {}
 
-  async processPayment(userId: number, createPaymentDto: CreatePaymentDTO) {
+  async processPayment(userId: number, createPaymentDto: CreatePaymentDTO, ipAddr?: string) {
     const { ticketIds, method } = createPaymentDto
 
     const tickets = await this.paymentRepository.findTicketsByIds(ticketIds)
@@ -39,7 +43,38 @@ export class PaymentService {
       throw new BadRequestException('Cannot pay for tickets with expired schedules')
     }
 
-    // Create payment DTO with calculated amount
+    // If payment method is E_WALLET, create VNPay payment URL
+    if (method === 'E_WALLET' && ipAddr) {
+      const orderId = `MOVIE_${Date.now()}_${userId}`
+      const orderInfo = `Payment for ${tickets.length} movie tickets - ${tickets[0].schedule.movie.title}`
+
+      const paymentUrl = this.vnpayService.createPaymentUrl(totalAmount, orderInfo, orderId, ipAddr)
+
+      // Create payment record with PENDING status
+      const paymentDto = {
+        ...createPaymentDto,
+        amount: totalAmount,
+      }
+
+      const result = await this.paymentRepository.createPaymentWithBooking(userId, {
+        ...paymentDto,
+        status: 'PENDING',
+      })
+
+      return {
+        message: 'VNPay payment URL created',
+        paymentId: result.payment.id,
+        bookingId: result.booking.id,
+        amount: Number(result.payment.amount),
+        method: result.payment.method,
+        status: 'PENDING',
+        paymentUrl,
+        orderId,
+        ticketsCount: ticketIds.length,
+      }
+    }
+
+    // For other payment methods, process directly
     const paymentDto = {
       ...createPaymentDto,
       amount: totalAmount,
@@ -56,6 +91,130 @@ export class PaymentService {
       status: result.payment.status,
       paidAt: result.payment.paidAt,
       ticketsCount: ticketIds.length,
+    }
+  }
+
+  async handleVNPayReturn(vnpParams: Record<string, string>) {
+    const verificationResult = this.vnpayService.verifyReturnUrl(vnpParams)
+
+    if (!verificationResult.isValid) {
+      throw new BadRequestException('Invalid VNPay signature')
+    }
+
+    const { responseCode, orderId, amount } = verificationResult
+
+    // Extract payment ID from orderId format: MOVIE_timestamp_userId
+    const orderIdParts = orderId.split('_')
+    if (orderIdParts.length < 3) {
+      throw new BadRequestException('Invalid order ID format')
+    }
+    const paymentId = parseInt(orderIdParts[2])
+
+    if (responseCode === '00') {
+      // Payment successful
+      await this.paymentRepository.updatePaymentStatus(paymentId, 'COMPLETED')
+      return {
+        message: 'Payment completed successfully',
+        status: 'success',
+        paymentId,
+        amount,
+        responseCode,
+      }
+    } else if (responseCode === '24') {
+      // User cancelled payment
+      await this.paymentRepository.updatePaymentStatus(paymentId, 'CANCELLED')
+      return {
+        message: 'Payment was cancelled by user',
+        status: 'cancelled',
+        paymentId,
+        amount,
+        responseCode,
+      }
+    } else {
+      // Payment failed (other error codes)
+      await this.paymentRepository.updatePaymentStatus(paymentId, 'FAILED')
+      return {
+        message: 'Payment failed',
+        status: 'failed',
+        paymentId,
+        responseCode,
+        amount,
+      }
+    }
+  }
+
+  async refundPayment(paymentId: number, userId: number, reason?: string) {
+    const payment = await this.paymentRepository.findPaymentById(paymentId)
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found')
+    }
+
+    if (payment.userId !== userId) {
+      throw new ForbiddenException('You can only refund your own payments')
+    }
+
+    if (payment.status !== 'COMPLETED') {
+      throw new BadRequestException('Only completed payments can be refunded')
+    }
+
+    // Check if the show time is at least 2 hours away
+    const booking = payment.bookings[0]
+    if (booking && booking.bookingTickets.length > 0) {
+      const showTime = booking.bookingTickets[0].ticket.schedule.startTime
+      const currentTime = new Date()
+      const timeDifference = showTime.getTime() - currentTime.getTime()
+      const hoursUntilShow = timeDifference / (1000 * 60 * 60)
+
+      if (hoursUntilShow < 2) {
+        throw new BadRequestException('Refunds are only available until 2 hours before show time')
+      }
+    }
+
+    // Update payment status to REFUNDED
+    await this.paymentRepository.updatePaymentStatus(paymentId, 'REFUNDED')
+
+    // Update related tickets status to CANCELLED
+    const ticketIds = payment.bookings.flatMap((booking) => booking.bookingTickets.map((bt) => bt.ticket.id))
+
+    await this.paymentRepository.updateTicketsStatus(ticketIds, 'CANCELLED')
+
+    return {
+      message: 'Payment refunded successfully',
+      paymentId,
+      refundAmount: Number(payment.amount),
+      refundedAt: new Date(),
+      reason: reason || 'Customer request',
+    }
+  }
+
+  async cancelPayment(paymentId: number, userId: number) {
+    const payment = await this.paymentRepository.findPaymentById(paymentId)
+
+    if (!payment) {
+      throw new NotFoundException('Payment not found')
+    }
+
+    if (payment.userId !== userId) {
+      throw new ForbiddenException('You can only cancel your own payments')
+    }
+
+    if (payment.status !== 'PENDING') {
+      throw new BadRequestException('Only pending payments can be cancelled')
+    }
+
+    // Update payment status to CANCELLED
+    await this.paymentRepository.updatePaymentStatus(paymentId, 'CANCELLED')
+
+    // Update related tickets status to CANCELLED
+    const ticketIds = payment.bookings.flatMap((booking) => booking.bookingTickets.map((bt) => bt.ticket.id))
+
+    await this.paymentRepository.updateTicketsStatus(ticketIds, 'CANCELLED')
+
+    return {
+      message: 'Payment cancelled successfully',
+      paymentId,
+      cancelledAt: new Date(),
     }
   }
 

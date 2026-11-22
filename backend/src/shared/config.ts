@@ -45,26 +45,26 @@ class ConfigSchema {
   RESEND_API_KEY: string
 
   @IsString()
-  AWS_S3_REGION:string
+  AWS_S3_REGION: string
 
   @IsString()
-  AWS_S3_ACCESS_KEY:string
+  AWS_S3_ACCESS_KEY: string
 
   @IsString()
-  AWS_S3_SERCRET_KEY:string
-  
-  @IsString()
-  AWS_BUCKET_NAME:string
-
-   @IsString()
-  GOOGLE_CLIENT_ID : string
+  AWS_S3_SERCRET_KEY: string
 
   @IsString()
-  GOOGLE_CLIENT_SECRET :string
+  AWS_BUCKET_NAME: string
 
   @IsString()
-  GOOGLE_REDIRECT_URI :string
-  
+  GOOGLE_CLIENT_ID: string
+
+  @IsString()
+  GOOGLE_CLIENT_SECRET: string
+
+  @IsString()
+  GOOGLE_REDIRECT_URI: string
+
   @IsString()
   GOOGLE_CLIENT_REDIRECT_URL: String
 }

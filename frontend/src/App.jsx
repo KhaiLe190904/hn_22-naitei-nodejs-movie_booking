@@ -25,6 +25,8 @@ import ManageRoles from "./pages/admin/ManageRoles";
 import OauthGoogleCallback from "./pages/authGoogleCallback ";
 import ManageUsers from "./pages/admin/ManageUsers";
 import Payment from "./pages/Payment";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import VNPayReturn from "./pages/VNPayReturn";
 import Releases from "./pages/Releases";
 import Cinemas from "./pages/Cinemas";
 import CinemaDetails from "./pages/CinemaDetails";
@@ -52,6 +54,8 @@ const App = () => {
           <Route path="/favorites" element={<Favorite />} />
           <Route path="/releases" element={<Releases />} />
           <Route path="/payment" element={<Payment />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
+          <Route path="/payment/vnpay-return" element={<VNPayReturn />} />
           <Route path="/admin/*" element={
             <ProtectedAdminRoute>
               <AdminLayout />
